@@ -43,6 +43,9 @@
                     <p class="text-sm text-blue-700">
                         Di: "Mesa 5, cuatro soberanas" - Si no hay stock suficiente, preguntará si deseas la cantidad disponible
                     </p>
+                    <p class="text-xs text-blue-600 mt-2">
+                        ⚠️ <strong>Importante:</strong> Si la app se responde sola, baja el volumen o usa auriculares
+                    </p>
                 </div>
 
                 <div id="voiceStatus" class="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 hidden">
@@ -321,21 +324,65 @@
                 }
             };
 
-            recognition.onerror = () => stopListening();
-            recognition.onend = () => { if (isListening) recognition.start(); };
+            recognition.onerror = (e) => {
+                console.error('Error voz:', e.error);
+                // Solo reintentar si es un error temporal
+                if (e.error === 'no-speech' || e.error === 'audio-capture') {
+                    stopListening();
+                }
+            };
+            recognition.onend = () => { 
+                // Solo reiniciar automáticamente si debería estar escuchando
+                // y no estamos en medio de una respuesta de voz
+                if (isListening && !synthesis.speaking) {
+                    try {
+                        recognition.start();
+                    } catch(e) {
+                        console.log('No se pudo reiniciar el reconocimiento');
+                    }
+                }
+            };
         }
 
         function speak(text, callback) {
             synthesis.cancel();
+            
+            // Pausar el reconocimiento mientras habla para evitar que se escuche a sí misma
+            const wasListening = isListening;
+            if (isListening) {
+                recognition.stop();
+                isListening = false;
+            }
+            
             const u = new SpeechSynthesisUtterance(text);
             u.lang = 'es-ES';
             u.rate = 0.95;
             document.getElementById('voiceStatus').classList.remove('hidden');
+            
             u.onend = () => {
                 document.getElementById('voiceStatus').classList.add('hidden');
-                if (callback) callback();
+                
+                // Esperar un poco antes de reactivar el micrófono
+                setTimeout(() => {
+                    if (wasListening && recognition) {
+                        recognition.start();
+                        isListening = true;
+                    }
+                    if (callback) callback();
+                }, 500);
             };
-            u.onerror = u.onend;
+            
+            u.onerror = () => {
+                document.getElementById('voiceStatus').classList.add('hidden');
+                setTimeout(() => {
+                    if (wasListening && recognition) {
+                        recognition.start();
+                        isListening = true;
+                    }
+                    if (callback) callback();
+                }, 500);
+            };
+            
             synthesis.speak(u);
         }
 
@@ -348,21 +395,37 @@
         }
 
         function startListening() {
-            recognition.start();
-            isListening = true;
-            document.getElementById('micBtn').className = 'flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white bg-red-500 animate-pulse';
-            document.getElementById('micIcon').textContent = '🔴';
-            document.getElementById('micText').textContent = 'Detener';
-            document.getElementById('transcriptBox').classList.remove('hidden');
+            // No iniciar si la app está hablando
+            if (synthesis.speaking) {
+                setTimeout(startListening, 500);
+                return;
+            }
+            
+            try {
+                recognition.start();
+                isListening = true;
+                document.getElementById('micBtn').className = 'flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white bg-red-500 animate-pulse';
+                document.getElementById('micIcon').textContent = '🔴';
+                document.getElementById('micText').textContent = 'Detener';
+                document.getElementById('transcriptBox').classList.remove('hidden');
+            } catch(e) {
+                console.log('Error al iniciar:', e);
+            }
         }
 
         function stopListening() {
-            recognition.stop();
+            try {
+                recognition.stop();
+            } catch(e) {
+                console.log('Error al detener');
+            }
+            synthesis.cancel(); // Cancelar cualquier voz en curso
             isListening = false;
             document.getElementById('micBtn').className = 'flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white bg-green-500';
             document.getElementById('micIcon').textContent = '🎤';
             document.getElementById('micText').textContent = 'Iniciar';
             document.getElementById('transcriptBox').classList.add('hidden');
+            document.getElementById('voiceStatus').classList.add('hidden');
         }
 
         function extractQuantity(text, keyword) {
