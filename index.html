@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedidos por Voz - Bar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .animate-bounce { animation: bounce 1s infinite; }
+        .tab-active { background-color: #f59e0b; color: white; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-amber-50 to-orange-100 min-h-screen">
+    <div class="max-w-6xl mx-auto p-4">
+        <h1 class="text-4xl font-bold text-amber-900 mb-6 text-center">🍺 Sistema de Pedidos por Voz</h1>
+
+        <!-- Pestañas -->
+        <div class="flex gap-2 mb-6">
+            <button onclick="showTab('orders')" id="tabOrders" class="flex-1 py-3 rounded-lg font-bold transition-all tab-active">
+                📋 Pedidos
+            </button>
+            <button onclick="showTab('products')" id="tabProducts" class="flex-1 py-3 rounded-lg font-bold bg-white hover:bg-gray-100 transition-all">
+                📦 Productos
+            </button>
+        </div>
+
+        <!-- TAB: PEDIDOS -->
+        <div id="ordersTab">
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Pedido Actual</h2>
+                    <button id="micBtn" onclick="toggleListening()" class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white transition-all bg-green-500 hover:bg-green-600">
+                        <span id="micIcon">🎤</span>
+                        <span id="micText">Iniciar Micrófono</span>
+                    </button>
+                </div>
+
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <p class="text-sm text-blue-800 font-semibold mb-2">💡 Cómo usar:</p>
+                    <p class="text-sm text-blue-700">
+                        Di: "Mesa 5, cuatro soberanas" - Si no hay stock suficiente, preguntará si deseas la cantidad disponible
+                    </p>
+                </div>
+
+                <div id="voiceStatus" class="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 hidden">
+                    <p class="text-sm text-green-800 flex items-center gap-2">
+                        <span class="text-xl">🔊</span>
+                        <span id="voiceStatusText">Hablando...</span>
+                    </p>
+                </div>
+
+                <div id="waitingStockConfirmation" class="bg-orange-50 border-2 border-orange-400 rounded-lg p-4 mb-4 hidden">
+                    <p class="text-lg text-orange-900 font-bold flex items-center gap-2 animate-bounce">
+                        <span class="text-2xl">⚠️</span>
+                        <span id="stockQuestion">Di "SÍ" o "NO"</span>
+                    </p>
+                </div>
+
+                <div id="waitingConfirmation" class="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 mb-4 hidden">
+                    <p class="text-lg text-yellow-900 font-bold flex items-center gap-2 animate-bounce">
+                        <span class="text-2xl">⏳</span>
+                        Di "GUARDAR" o "REPETIR"
+                    </p>
+                </div>
+
+                <div id="transcriptBox" class="bg-gray-50 rounded-lg p-4 mb-4 min-h-20 hidden">
+                    <p class="text-sm text-gray-500 mb-1">Escuchando...</p>
+                    <p id="transcript" class="text-gray-800">Di tu pedido...</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Mesa:</label>
+                    <input type="text" id="tableInput" class="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Número de mesa">
+                </div>
+
+                <div id="currentItems" class="mb-4 hidden">
+                    <h3 class="font-bold text-gray-700 mb-2">Productos:</h3>
+                    <div id="itemsList" class="space-y-2"></div>
+                    <div class="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center">
+                        <span class="text-xl font-bold text-gray-800">TOTAL:</span>
+                        <span id="currentTotal" class="text-2xl font-bold text-amber-600">$0.00</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="saveOrder()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg">
+                        ✅ Guardar Pedido
+                    </button>
+                    <button onclick="clearOrder()" class="px-6 bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold py-3 rounded-lg">
+                        🔄 Limpiar
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="text-green-600 text-3xl">💰</span>
+                        <div>
+                            <p class="text-sm text-gray-500">Ventas del Día</p>
+                            <p id="totalSales" class="text-3xl font-bold text-green-600">$0.00</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-blue-600 text-3xl">🕐</span>
+                        <div>
+                            <p class="text-sm text-gray-500">Pedidos</p>
+                            <p id="totalOrders" class="text-3xl font-bold text-blue-600">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Pedidos Guardados</h2>
+                <div id="ordersList" class="space-y-4">
+                    <p class="text-gray-500 text-center py-8">No hay pedidos aún</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: PRODUCTOS -->
+        <div id="productsTab" class="hidden">
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Agregar Producto</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Nombre *</label>
+                        <input type="text" id="newProductName" class="w-full px-4 py-2 border rounded-lg" placeholder="Ej: Soberana">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Precio ($) *</label>
+                        <input type="number" step="0.01" id="newProductPrice" class="w-full px-4 py-2 border rounded-lg" placeholder="3.50">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Stock</label>
+                        <input type="number" id="newProductStock" class="w-full px-4 py-2 border rounded-lg" placeholder="100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Categoría</label>
+                        <input type="text" id="newProductCategory" class="w-full px-4 py-2 border rounded-lg" placeholder="Cerveza">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Palabras Clave (separadas por comas) *</label>
+                    <input type="text" id="newProductKeywords" class="w-full px-4 py-2 border rounded-lg" placeholder="soberana, sobe">
+                    <p class="text-xs text-gray-500 mt-1">Ej: soberana, sobe, birra soberana</p>
+                </div>
+
+                <button onclick="addProduct()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg">
+                    ➕ Agregar Producto
+                </button>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Inventario</h2>
+                    <span id="productCount" class="font-bold text-gray-600">0 productos</span>
+                </div>
+                <div id="productsList" class="space-y-3">
+                    <p class="text-gray-500 text-center py-8">Agrega tu primer producto</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let isListening = false;
+        let recognition = null;
+        let synthesis = window.speechSynthesis;
+        let currentOrder = { items: [], table: '', total: 0 };
+        let orders = [];
+        let products = [];
+        let waitingForConfirmation = false;
+        let waitingForStockConfirmation = false;
+        let pendingStockItem = null;
+        let confirmationTimeout = null;
+
+        const numberWords = {
+            'una': 1, 'un': 1, 'uno': 1, 'dos': 2, 'tres': 3, 'cuatro': 4,
+            'cinco': 5, 'seis': 6, 'siete': 7, 'ocho': 8, 'nueve': 9,
+            'diez': 10, 'once': 11, 'doce': 12, 'quince': 15, 'veinte': 20
+        };
+
+        // Inicialización
+        function loadData() {
+            const saved = localStorage.getItem('barProducts');
+            if (saved) {
+                products = JSON.parse(saved);
+            } else {
+                products = [
+                    { id: 1, name: 'Cerveza', price: 3.50, stock: 100, category: 'Cerveza', keywords: ['cerveza', 'birra'] },
+                    { id: 2, name: 'Agua', price: 1.50, stock: 50, category: 'Bebida', keywords: ['agua'] }
+                ];
+                localStorage.setItem('barProducts', JSON.stringify(products));
+            }
+            
+            const savedOrders = localStorage.getItem('barOrders');
+            if (savedOrders) orders = JSON.parse(savedOrders);
+            
+            updateProductsList();
+            updateOrdersList();
+        }
+
+        // Tabs
+        function showTab(tab) {
+            if (tab === 'orders') {
+                document.getElementById('ordersTab').classList.remove('hidden');
+                document.getElementById('productsTab').classList.add('hidden');
+                document.getElementById('tabOrders').classList.add('tab-active');
+                document.getElementById('tabProducts').classList.remove('tab-active');
+            } else {
+                document.getElementById('ordersTab').classList.add('hidden');
+                document.getElementById('productsTab').classList.remove('hidden');
+                document.getElementById('tabOrders').classList.remove('tab-active');
+                document.getElementById('tabProducts').classList.add('tab-active');
+            }
+        }
+
+        // Productos
+        function addProduct() {
+            const name = document.getElementById('newProductName').value.trim();
+            const price = parseFloat(document.getElementById('newProductPrice').value);
+            const stock = parseInt(document.getElementById('newProductStock').value) || 0;
+            const category = document.getElementById('newProductCategory').value.trim() || 'General';
+            const keywords = document.getElementById('newProductKeywords').value.toLowerCase().split(',').map(k => k.trim()).filter(k => k);
+
+            if (!name || !price || keywords.length === 0) {
+                alert('Completa: Nombre, Precio y Palabras Clave');
+                return;
+            }
+
+            products.push({ id: Date.now(), name, price, stock, category, keywords });
+            localStorage.setItem('barProducts', JSON.stringify(products));
+            
+            document.getElementById('newProductName').value = '';
+            document.getElementById('newProductPrice').value = '';
+            document.getElementById('newProductStock').value = '';
+            document.getElementById('newProductCategory').value = '';
+            document.getElementById('newProductKeywords').value = '';
+            
+            updateProductsList();
+            alert('✅ Producto agregado');
+        }
+
+        function deleteProduct(id) {
+            if (confirm('¿Eliminar?')) {
+                products = products.filter(p => p.id !== id);
+                localStorage.setItem('barProducts', JSON.stringify(products));
+                updateProductsList();
+            }
+        }
+
+        function updateStock(id, change) {
+            const p = products.find(pr => pr.id === id);
+            if (p) {
+                p.stock = Math.max(0, p.stock + change);
+                localStorage.setItem('barProducts', JSON.stringify(products));
+                updateProductsList();
+            }
+        }
+
+        function updateProductsList() {
+            const list = document.getElementById('productsList');
+            document.getElementById('productCount').textContent = products.length + ' productos';
+
+            if (products.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 text-center py-8">Agrega productos</p>';
+                return;
+            }
+
+            list.innerHTML = products.map(p => `
+                <div class="border ${p.stock === 0 ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-lg p-4">
+                    <div class="flex justify-between mb-2">
+                        <div>
+                            <h3 class="font-bold text-lg">${p.name}</h3>
+                            <p class="text-sm text-gray-600">${p.category}</p>
+                        </div>
+                        <button onclick="deleteProduct(${p.id})" class="text-red-500">🗑️</button>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xl font-bold text-amber-600">$${p.price.toFixed(2)}</span>
+                        <div class="flex gap-2 items-center">
+                            <button onclick="updateStock(${p.id}, -1)" class="bg-red-500 text-white px-3 py-1 rounded">-</button>
+                            <span class="font-bold">Stock: ${p.stock}</span>
+                            <button onclick="updateStock(${p.id}, 1)" class="bg-green-500 text-white px-3 py-1 rounded">+</button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500"><strong>Palabras:</strong> ${p.keywords.join(', ')}</p>
+                </div>
+            `).join('');
+        }
+
+        // Reconocimiento de voz
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SR();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'es-ES';
+
+            recognition.onresult = (event) => {
+                let final = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const text = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        final += text + ' ';
+                    } else {
+                        document.getElementById('transcript').textContent = text;
+                    }
+                }
+                if (final) {
+                    document.getElementById('transcript').textContent += final;
+                    processVoice(final.toLowerCase());
+                }
+            };
+
+            recognition.onerror = () => stopListening();
+            recognition.onend = () => { if (isListening) recognition.start(); };
+        }
+
+        function speak(text, callback) {
+            synthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'es-ES';
+            u.rate = 0.95;
+            document.getElementById('voiceStatus').classList.remove('hidden');
+            u.onend = () => {
+                document.getElementById('voiceStatus').classList.add('hidden');
+                if (callback) callback();
+            };
+            u.onerror = u.onend;
+            synthesis.speak(u);
+        }
+
+        function toggleListening() {
+            if (!recognition) {
+                alert('Tu navegador no soporta voz. Usa Chrome');
+                return;
+            }
+            isListening ? stopListening() : startListening();
+        }
+
+        function startListening() {
+            recognition.start();
+            isListening = true;
+            document.getElementById('micBtn').className = 'flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white bg-red-500 animate-pulse';
+            document.getElementById('micIcon').textContent = '🔴';
+            document.getElementById('micText').textContent = 'Detener';
+            document.getElementById('transcriptBox').classList.remove('hidden');
+        }
+
+        function stopListening() {
+            recognition.stop();
+            isListening = false;
+            document.getElementById('micBtn').className = 'flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white bg-green-500';
+            document.getElementById('micIcon').textContent = '🎤';
+            document.getElementById('micText').textContent = 'Iniciar';
+            document.getElementById('transcriptBox').classList.add('hidden');
+        }
+
+        function extractQuantity(text, keyword) {
+            const digitMatch = text.match(new RegExp(`(\\d+)\\s*${keyword}`, 'i'));
+            if (digitMatch) return parseInt(digitMatch[1]);
+            
+            const wordMatch = text.match(new RegExp(`(un|una?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\\s+${keyword}`, 'i'));
+            if (wordMatch) {
+                const w = wordMatch[1].toLowerCase();
+                return numberWords[w] || 1;
+            }
+            return 1;
+        }
+
+        function processVoice(text) {
+            // Confirmación de stock
+            if (waitingForStockConfirmation) {
+                if (text.includes('si') || text.includes('sí') || text.includes('ok')) {
+                    waitingForStockConfirmation = false;
+                    document.getElementById('waitingStockConfirmation').classList.add('hidden');
+                    
+                    if (pendingStockItem) {
+                        const ex = currentOrder.items.find(i => i.productId === pendingStockItem.product.id);
+                        if (ex) {
+                            ex.quantity += pendingStockItem.availableStock;
+                        } else {
+                            currentOrder.items.push({
+                                productId: pendingStockItem.product.id,
+                                name: pendingStockItem.product.name,
+                                price: pendingStockItem.product.price,
+                                quantity: pendingStockItem.availableStock
+                            });
+                        }
+                        updateCurrentOrder();
+                        speak(`Agregadas ${pendingStockItem.availableStock} de ${pendingStockItem.product.name}`);
+                        pendingStockItem = null;
+                        setTimeout(() => askConfirmation(), 2000);
+                    }
+                } else if (text.includes('no')) {
+                    waitingForStockConfirmation = false;
+                    document.getElementById('waitingStockConfirmation').classList.add('hidden');
+                    speak('Ok, no agregado');
+                    pendingStockItem = null;
+                }
+                return;
+            }
+
+            // Confirmación de pedido
+            if (waitingForConfirmation) {
+                if (text.includes('guardar') || text.includes('si') || text.includes('sí')) {
+                    waitingForConfirmation = false;
+                    document.getElementById('waitingConfirmation').classList.add('hidden');
+                    saveOrder();
+                } else if (text.includes('repetir') || text.includes('no')) {
+                    waitingForConfirmation = false;
+                    document.getElementById('waitingConfirmation').classList.add('hidden');
+                    speak('Repite');
+                    clearOrder();
+                }
+                return;
+            }
+
+            const prevCount = currentOrder.items.length;
+            
+            // Mesa
+            const tableM = text.match(/mesa (\d+)/i);
+            if (tableM) {
+                currentOrder.table = tableM[1];
+                document.getElementById('tableInput').value = tableM[1];
+            }
+
+            // Productos
+            const processed = new Set();
+            products.forEach(p => {
+                p.keywords.forEach(kw => {
+                    const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    if (text.includes(kw) && !processed.has(p.id)) {
+                        const qty = extractQuantity(text, esc);
+                        addItem(p, qty);
+                        processed.add(p.id);
+                    }
+                });
+            });
+
+            if (currentOrder.items.length > prevCount) {
+                clearTimeout(confirmationTimeout);
+                confirmationTimeout = setTimeout(() => askConfirmation(), 2000);
+            }
+        }
+
+        function addItem(product, quantity) {
+            if (product.stock === 0) {
+                speak(`No hay stock de ${product.name}`);
+                return;
+            }
+
+            if (product.stock < quantity) {
+                pendingStockItem = {
+                    product: product,
+                    requestedQuantity: quantity,
+                    availableStock: product.stock
+                };
+                
+                speak(`Pediste ${quantity} de ${product.name}, pero solo quedan ${product.stock}. ¿Deseas las ${product.stock} disponibles?`, () => {
+                    waitingForStockConfirmation = true;
+                    document.getElementById('waitingStockConfirmation').classList.remove('hidden');
+                    document.getElementById('stockQuestion').textContent = `¿Deseas ${product.stock} ${product.name}? Di SÍ o NO`;
+                });
+                return;
+            }
+
+            const ex = currentOrder.items.find(i => i.productId === product.id);
+            if (ex) {
+                ex.quantity += quantity;
+            } else {
+                currentOrder.items.push({
+                    productId: product.id,
+                    name: product.name,
+                    price: product.price,
+                    quantity: quantity
+                });
+            }
+            updateCurrentOrder();
+        }
+
+        function askConfirmation() {
+            if (currentOrder.items.length === 0) return;
+
+            let msg = 'Pedido: ';
+            if (currentOrder.table) msg += `Mesa ${currentOrder.table}. `;
+
+            const items = currentOrder.items.map(i => {
+                return i.quantity === 1 ? `una ${i.name}` : `${i.quantity} ${i.name}`;
+            });
+
+            if (items.length === 1) msg += items[0];
+            else if (items.length === 2) msg += items.join(' y ');
+            else {
+                const last = items.pop();
+                msg += items.join(', ') + ' y ' + last;
+            }
+
+            msg += `. Total: ${currentOrder.total.toFixed(2)} dólares. ¿Guardar o repetir?`;
+
+            speak(msg, () => {
+                waitingForConfirmation = true;
+                document.getElementById('waitingConfirmation').classList.remove('hidden');
+            });
+        }
+
+        function updateCurrentOrder() {
+            const list = document.getElementById('itemsList');
+            const box = document.getElementById('currentItems');
+            
+            if (currentOrder.items.length === 0) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            box.classList.remove('hidden');
+            list.innerHTML = currentOrder.items.map(i => `
+                <div class="flex justify-between bg-gray-50 p-3 rounded">
+                    <span>${i.quantity}x ${i.name}</span>
+                    <span class="font-bold text-amber-600">$${(i.price * i.quantity).toFixed(2)}</span>
+                </div>
+            `).join('');
+
+            currentOrder.total = currentOrder.items.reduce((s, i) => s + (i.price * i.quantity), 0);
+            document.getElementById('currentTotal').textContent = `$${currentOrder.total.toFixed(2)}`;
+        }
+
+        function saveOrder() {
+            if (currentOrder.items.length === 0) {
+                speak('No hay productos');
+                return;
+            }
+
+            currentOrder.items.forEach(i => {
+                const p = products.find(pr => pr.id === i.productId);
+                if (p) p.stock = Math.max(0, p.stock - i.quantity);
+            });
+            localStorage.setItem('barProducts', JSON.stringify(products));
+            updateProductsList();
+
+            const order = {
+                items: [...currentOrder.items],
+                table: document.getElementById('tableInput').value || 'Sin mesa',
+                total: currentOrder.total,
+                id: Date.now(),
+                timestamp: new Date().toLocaleTimeString('es-ES')
+            };
+
+            orders.unshift(order);
+            localStorage.setItem('barOrders', JSON.stringify(orders));
+            updateOrdersList();
+            
+            speak('Guardado. Siguiente');
+            clearOrder();
+        }
+
+        function clearOrder() {
+            currentOrder = { items: [], table: '', total: 0 };
+            document.getElementById('tableInput').value = '';
+            updateCurrentOrder();
+            clearTimeout(confirmationTimeout);
+            waitingForConfirmation = false;
+            waitingForStockConfirmation = false;
+            pendingStockItem = null;
+            document.getElementById('waitingConfirmation').classList.add('hidden');
+            document.getElementById('waitingStockConfirmation').classList.add('hidden');
+        }
+
+        function deleteOrder(id) {
+            orders = orders.filter(o => o.id !== id);
+            localStorage.setItem('barOrders', JSON.stringify(orders));
+            updateOrdersList();
+        }
+
+        function updateOrdersList() {
+            const list = document.getElementById('ordersList');
+            const total = orders.reduce((s, o) => s + o.total, 0);
+            
+            document.getElementById('totalSales').textContent = `$${total.toFixed(2)}`;
+            document.getElementById('totalOrders').textContent = orders.length;
+
+            if (orders.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 text-center py-8">No hay pedidos</p>';
+                return;
+            }
+
+            list.innerHTML = orders.map(o => `
+                <div class="border rounded-lg p-4">
+                    <div class="flex justify-between mb-3">
+                        <div>
+                            <span class="text-sm text-gray-500">${o.timestamp}</span>
+                            <h3 class="font-bold">Mesa: ${o.table}</h3>
+                        </div>
+                        <button onclick="deleteOrder(${o.id})" class="text-red-500">🗑️</button>
+                    </div>
+                    <div class="space-y-1 mb-2">
+                        ${o.items.map(i => `
+                            <div class="flex justify-between text-sm">
+                                <span>${i.quantity}x ${i.name}</span>
+                                <span>$${(i.price * i.quantity).toFixed(2)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="pt-2 border-t flex justify-between">
+                        <span class="font-bold">TOTAL:</span>
+                        <span class="font-bold text-amber-600">$${o.total.toFixed(2)}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
